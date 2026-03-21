@@ -1,0 +1,70 @@
+
+## `.gitignore`
+
+```gitignore
+# R
+.Rhistory
+.Rapp.history
+.RData
+.Ruserdata
+.Rproj.user/
+
+# RStudio project files
+*.Rproj
+
+# Quarto / R Markdown intermediates
+*.html
+*.utf8.md
+*.knit.md
+*_cache/
+*_files/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python / misc virtual envs
+.venv/
+venv/
+env/
+
+# Logs
+*.log
+
+# Local secrets / config
+Renviron.site
+.Renviron
+.env
+.env.*
+
+# Data
+data/raw/*
+!data/raw/.gitkeep
+
+# Processed outputs
+data/processed/*
+!data/processed/.gitkeep
+!data/processed/tables/
+!data/processed/figures/
+data/processed/tables/manuscript/*
+!data/processed/tables/manuscript/.gitkeep
+data/processed/figures/manuscript/*
+!data/processed/figures/manuscript/.gitkeep
+
+# Large model/data artifacts
+*.rds
+*.rda
+*.RDS
+*.qs
+*.fst
+*.feather
+*.parquet
+
+# App runtime / deployment clutter
+rsconnect/
+shinyapps/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
