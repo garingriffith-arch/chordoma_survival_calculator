@@ -213,7 +213,7 @@ ui <- page_fluid(
         ),
         div(
           h1(
-            "Chordoma Overall Survival Estimator",
+            "Intracranial Chordoma Overall Survival Estimator",
             class = "header-title"
           ),
           p("Oregon Health & Science University", class = "ohsu-subtitle"),
