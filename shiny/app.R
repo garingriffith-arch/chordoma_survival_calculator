@@ -4,6 +4,7 @@ suppressPackageStartupMessages({
   library(bslib)
   library(ggplot2)
   library(rms)
+  library(renv)
 })
 
 obj <- readRDS(file.path("..", "data", "processed", "chordoma_model_objects.rds"))
