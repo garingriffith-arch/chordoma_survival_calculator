@@ -520,8 +520,7 @@ ui <- page_fluid(
             tags$ul(
               tags$li("Internal validation showed good discrimination, with an optimism-corrected Harrell C-index of 0.762 and optimism-corrected calibration slope of 0.912."),
               tags$li("Optimism-corrected AUCs were 0.782 at 5 years and 0.798 at 10 years."),
-              tags$li("The calculator is based on registry data and does not incorporate extent of resection, recurrence, radiation details, or molecular markers."),
-              tags$li("External validation is still needed before broad clinical application.")
+              tags$li("The calculator is based on registry data and does not incorporate extent of resection, recurrence, radiation details, or molecular markers.")
             )
           )
         )
