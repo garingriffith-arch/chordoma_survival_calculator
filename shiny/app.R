@@ -1,14 +1,16 @@
 suppressPackageStartupMessages({
   library(shiny)
   library(survival)
-  library(splines)
   library(bslib)
   library(ggplot2)
+  library(rms)
 })
 
-fit <- readRDS(file.path("..", "data", "processed", "03_cox_model.rds"))
-xlev <- fit$xlevels
-model_n <- fit$n
+obj <- readRDS(file.path("..", "data", "processed", "chordoma_model_objects.rds"))
+fit <- obj$cph_fit
+df_ref <- obj$df2
+
+model_n <- nrow(df_ref)
 
 safe_factor <- function(val, levels) {
   if (is.null(levels) || length(levels) == 0) return(factor(val))
@@ -23,36 +25,57 @@ surv_at <- function(sf, t) {
 
 median_stats <- function(sf) {
   out <- list(med = NA_real_, lower = NA_real_, upper = NA_real_)
-  q <- tryCatch(quantile(sf, probs = 0.5, conf.int = TRUE), error = function(e) NULL)
+  
+  q <- tryCatch(
+    quantile(sf, probs = 0.5, conf.int = TRUE),
+    error = function(e) NULL
+  )
+  
   if (!is.null(q)) {
     out$med <- suppressWarnings(as.numeric(q$quantile[1]))
     if (!is.null(q$lower)) out$lower <- suppressWarnings(as.numeric(q$lower[1]))
     if (!is.null(q$upper)) out$upper <- suppressWarnings(as.numeric(q$upper[1]))
     return(out)
   }
+  
   if (!is.null(sf$time) && !is.null(sf$surv) && length(sf$time) > 0) {
     idx <- which(sf$surv <= 0.5)[1]
     if (!is.na(idx)) out$med <- as.numeric(sf$time[idx])
   }
+  
   out
 }
 
 pretty_ins <- function(x) {
   x <- as.character(x)
-  x <- gsub("_", " / ", x, fixed = TRUE)
+  x <- gsub("OtherGov", "Other Government", x, fixed = TRUE)
   x <- gsub("/", " / ", x, fixed = TRUE)
   x <- gsub("\\s+", " ", x)
   trimws(x)
 }
 
 pretty_income <- function(x) {
-  x <- as.character(x)
-  x <- gsub("\\s+", " ", x)
-  trimws(x)
+  paste("Quartile", as.character(x))
 }
 
-ins_choices <- setNames(xlev$insurance_bin4, pretty_ins(xlev$insurance_bin4))
-inc_choices <- setNames(xlev$income_lowhigh, pretty_income(xlev$income_lowhigh))
+ref_levels <- list(
+  SEX3 = levels(df_ref$SEX3),
+  RACE3 = levels(df_ref$RACE3),
+  HISP2 = levels(df_ref$HISP2),
+  INS3 = levels(df_ref$INS3),
+  MED_INC_QUAR = levels(df_ref$MED_INC_QUAR)
+)
+
+ins_choices <- setNames(ref_levels$INS3, pretty_ins(ref_levels$INS3))
+inc_choices <- setNames(ref_levels$MED_INC_QUAR, pretty_income(ref_levels$MED_INC_QUAR))
+
+age_default <- round(median(df_ref$AGE_NUM, na.rm = TRUE))
+tumor_default <- round(median(df_ref$tumor_size_mm, na.rm = TRUE))
+cdcc_default <- round(median(df_ref$cdcc, na.rm = TRUE))
+
+income_num <- suppressWarnings(as.numeric(as.character(df_ref$MED_INC_QUAR)))
+income_default <- as.character(round(stats::median(income_num, na.rm = TRUE)))
+if (!income_default %in% ref_levels$MED_INC_QUAR) income_default <- ref_levels$MED_INC_QUAR[1]
 
 ui <- page_fluid(
   theme = bs_theme(
@@ -213,7 +236,7 @@ ui <- page_fluid(
 
       .metric-grid {
         display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 16px;
         margin-bottom: 18px;
       }
@@ -325,7 +348,7 @@ ui <- page_fluid(
           img(src = "ohsu_logo.png", class = "ohsu-logo")
         ),
         div(
-          h1("Grade II–III Intracranial Meningioma Survival Estimator", class = "header-title"),
+          h1("Intracranial Chordoma Overall Survival Estimator", class = "header-title"),
           p("Oregon Health & Science University", class = "ohsu-subtitle"),
           p("Department of Neurological Surgery", class = "ohsu-dept")
         )
@@ -342,56 +365,56 @@ ui <- page_fluid(
           card_body(
             h2("Patient characteristics", class = "section-title"),
             
-            numericInput("age", "Age (years)", value = 55, min = 18, max = 90, step = 1),
+            numericInput("age", "Age (years)", value = age_default, min = 18, max = 90, step = 1),
+            
+            numericInput(
+              "tsize_mm",
+              "Tumor size (mm)",
+              value = tumor_default,
+              min = 1,
+              max = 70,
+              step = 1
+            ),
             
             selectInput(
-              "sex", "Sex",
-              choices = xlev$SEX,
-              selected = xlev$SEX[1],
+              "sex3", "Sex",
+              choices = ref_levels$SEX3,
+              selected = ref_levels$SEX3[1],
               selectize = FALSE
             ),
             
             selectInput(
-              "race", "Race",
-              choices = xlev$race,
-              selected = xlev$race[1],
+              "race3", "Race",
+              choices = ref_levels$RACE3,
+              selected = ref_levels$RACE3[1],
               selectize = FALSE
             ),
             
             selectInput(
-              "ethnicity", "Ethnicity",
-              choices = xlev$ethnicity,
-              selected = xlev$ethnicity[1],
+              "hisp2", "Ethnicity",
+              choices = ref_levels$HISP2,
+              selected = ref_levels$HISP2[1],
               selectize = FALSE
             ),
             
-            numericInput("tsize_mm", "Tumor size (mm)", value = 45, min = 1, max = 150, step = 1),
+            selectInput(
+              "ins3", "Insurance",
+              choices = ins_choices,
+              selected = ref_levels$INS3[1],
+              selectize = FALSE
+            ),
             
             selectInput(
-              "grade", "WHO grade",
-              choices = c("Grade II" = "2", "Grade III" = "3"),
-              selected = "2",
+              "income", "Median income quartile",
+              choices = inc_choices,
+              selected = income_default,
               selectize = FALSE
             ),
             
             selectInput(
               "cdcc", "Charlson-Deyo score",
               choices = 0:3,
-              selected = 0,
-              selectize = FALSE
-            ),
-            
-            selectInput(
-              "insurance", "Insurance",
-              choices = ins_choices,
-              selected = xlev$insurance_bin4[1],
-              selectize = FALSE
-            ),
-            
-            selectInput(
-              "income", "Neighborhood income group",
-              choices = inc_choices,
-              selected = xlev$income_lowhigh[1],
+              selected = cdcc_default,
               selectize = FALSE
             ),
             
@@ -408,24 +431,16 @@ ui <- page_fluid(
           card(
             class = "metric-card",
             card_body(
-              div(textOutput("s1"), class = "metric-value"),
-              div("1-year overall survival", class = "metric-label")
-            )
-          ),
-          
-          card(
-            class = "metric-card",
-            card_body(
-              div(textOutput("s3"), class = "metric-value"),
-              div("3-year overall survival", class = "metric-label")
-            )
-          ),
-          
-          card(
-            class = "metric-card",
-            card_body(
               div(textOutput("s5"), class = "metric-value"),
               div("5-year overall survival", class = "metric-label")
+            )
+          ),
+          
+          card(
+            class = "metric-card",
+            card_body(
+              div(textOutput("s10"), class = "metric-value"),
+              div("10-year overall survival", class = "metric-label")
             )
           ),
           
@@ -470,9 +485,10 @@ ui <- page_fluid(
             class = "detail-section",
             h3("Model cohort and intended use"),
             tags$ul(
-              tags$li(paste0("Model cohort: n = ", format(model_n, big.mark = ","), " patients.")),
-              tags$li("Intended use: this tool provides population-level survival estimates derived from the National Cancer Database."),
-              tags$li("It is intended to support clinician-patient discussion and does not replace individualized clinical judgment.")
+              tags$li(paste0("Model cohort: n = ", format(model_n, big.mark = ","), " adults with intracranial chordoma.")),
+              tags$li("Intended use: this tool provides diagnosis-time, population-level overall survival estimates derived from the National Cancer Database."),
+              tags$li("It is intended to support clinician-patient discussion and risk stratification and does not replace individualized clinical judgment."),
+              tags$li("Predictions should be interpreted in the context of imaging, pathology, surgical planning, and multidisciplinary evaluation.")
             )
           ),
           
@@ -480,10 +496,10 @@ ui <- page_fluid(
             class = "detail-section",
             h3("Cohort and variables"),
             tags$ul(
-              tags$li("Data source: National Cancer Database (NCDB)."),
-              tags$li("Study population: adults with intracranial meningioma limited to primary site codes C70.0 and C70.9, histology codes 9530–9539, and WHO grade II or III disease."),
+              tags$li("Data source: National Cancer Database (NCDB) bone tumor extract."),
+              tags$li("Study population: adults with intracranial chordoma identified using ICD-O-3 histology/behavior codes 9370/3, 9371/3, and 9372/3 with primary site C41.0."),
               tags$li("Outcome: overall survival, measured in months from diagnosis."),
-              tags$li("Predictors included in the model: age, tumor size, sex, race, ethnicity, Charlson-Deyo comorbidity score, WHO grade, insurance category, and neighborhood income group.")
+              tags$li("Predictors included in the model: age, tumor size, sex, race, Hispanic ethnicity, insurance category, median household income quartile, and Charlson-Deyo comorbidity score.")
             )
           ),
           
@@ -492,9 +508,9 @@ ui <- page_fluid(
             h3("Statistical analysis"),
             tags$ul(
               tags$li("Model type: multivariable Cox proportional hazards regression."),
-              tags$li("Continuous predictors were modeled flexibly using spline terms where specified in the final model."),
-              tags$li("Predicted overall survival probabilities are displayed at 1, 3, and 5 years, along with the estimated survival curve."),
-              tags$li("Internal validation was performed with bootstrap optimism correction and horizon-specific performance assessment.")
+              tags$li("Age and tumor size were modeled flexibly using restricted cubic splines in the final model."),
+              tags$li("Displayed outputs include predicted overall survival at 5 and 10 years, the estimated survival curve, and median predicted survival when estimable."),
+              tags$li("Internal validation was performed with 300 bootstrap resamples, including global and horizon-specific performance assessment.")
             )
           ),
           
@@ -502,9 +518,10 @@ ui <- page_fluid(
             class = "detail-section",
             h3("Performance and interpretation"),
             tags$ul(
-              tags$li("This calculator is intended to provide population-level risk estimates rather than a deterministic patient-specific prognosis."),
-              tags$li("Estimates depend on the quality and coding of registry data and should be interpreted in the context of pathology, imaging, treatment details, and clinical judgment."),
-              tags$li("The median predicted survival is reported only when estimable from the predicted survival function.")
+              tags$li("Internal validation showed good discrimination, with an optimism-corrected Harrell C-index of 0.762 and optimism-corrected calibration slope of 0.912."),
+              tags$li("Optimism-corrected AUCs were 0.782 at 5 years and 0.798 at 10 years."),
+              tags$li("The calculator is based on registry data and does not incorporate extent of resection, recurrence, radiation details, or molecular markers."),
+              tags$li("External validation is still needed before broad clinical application.")
             )
           )
         )
@@ -512,40 +529,46 @@ ui <- page_fluid(
     )
   )
 )
-
 server <- function(input, output, session) {
   
   observe({
     current_age <- suppressWarnings(as.numeric(input$age))
-    if (!is.na(current_age) && current_age > 90) updateNumericInput(session, "age", value = 90)
-    if (!is.na(current_age) && current_age < 18) updateNumericInput(session, "age", value = 18)
+    if (!is.na(current_age) && current_age > 90) {
+      updateNumericInput(session, "age", value = 90)
+    }
+    if (!is.na(current_age) && current_age < 18) {
+      updateNumericInput(session, "age", value = 18)
+    }
   })
   
   observe({
     current_val <- suppressWarnings(as.numeric(input$tsize_mm))
-    if (!is.na(current_val) && current_val > 150) updateNumericInput(session, "tsize_mm", value = 150)
-    if (!is.na(current_val) && current_val < 1) updateNumericInput(session, "tsize_mm", value = 1)
+    if (!is.na(current_val) && current_val > 70) {
+      updateNumericInput(session, "tsize_mm", value = 70)
+    }
+    if (!is.na(current_val) && current_val < 1) {
+      updateNumericInput(session, "tsize_mm", value = 1)
+    }
   })
   
   newdata <- eventReactive(input$calc, {
     age_val <- suppressWarnings(as.numeric(input$age))
-    if (!is.finite(age_val)) age_val <- 55
+    if (!is.finite(age_val)) age_val <- age_default
     age_val <- min(max(age_val, 18), 90)
     
     tum <- suppressWarnings(as.numeric(input$tsize_mm))
-    if (!is.finite(tum)) tum <- 45
-    tum <- min(max(tum, 1), 150)
+    if (!is.finite(tum)) tum <- tumor_default
+    tum <- min(max(tum, 1), 70)
     
     data.frame(
-      age = age_val,
-      SEX = safe_factor(input$sex, xlev$SEX),
-      cdcc = as.numeric(input$cdcc),
-      grade23 = safe_factor(input$grade, xlev$grade23),
+      AGE_NUM = age_val,
       tumor_size_mm = tum,
-      race = safe_factor(input$race, xlev$race),
-      ethnicity = safe_factor(input$ethnicity, xlev$ethnicity),
-      insurance_bin4 = safe_factor(input$insurance, xlev$insurance_bin4),
-      income_lowhigh = safe_factor(input$income, xlev$income_lowhigh),
+      SEX3 = safe_factor(input$sex3, ref_levels$SEX3),
+      RACE3 = safe_factor(input$race3, ref_levels$RACE3),
+      HISP2 = safe_factor(input$hisp2, ref_levels$HISP2),
+      INS3 = safe_factor(input$ins3, ref_levels$INS3),
+      MED_INC_QUAR = safe_factor(input$income, ref_levels$MED_INC_QUAR),
+      cdcc = as.numeric(input$cdcc),
       check.names = FALSE
     )
   })
@@ -555,62 +578,87 @@ server <- function(input, output, session) {
     survfit(fit, newdata = newdata())
   })
   
-  output$s1 <- renderText({
-    req(surv_obj())
-    sprintf("%.1f%%", 100 * surv_at(surv_obj(), 12))
-  })
-  
-  output$s3 <- renderText({
-    req(surv_obj())
-    sprintf("%.1f%%", 100 * surv_at(surv_obj(), 36))
-  })
-  
   output$s5 <- renderText({
     req(surv_obj())
     sprintf("%.1f%%", 100 * surv_at(surv_obj(), 60))
   })
   
+  output$s10 <- renderText({
+    req(surv_obj())
+    sprintf("%.1f%%", 100 * surv_at(surv_obj(), 120))
+  })
+  
   output$med <- renderText({
     req(surv_obj())
     ms <- median_stats(surv_obj())
+    
     if (!is.finite(ms$med)) return("Not reached")
+    
+    med_round <- as.integer(round(ms$med))
+    
     if (is.finite(ms$lower) && is.finite(ms$upper)) {
       pm <- as.integer(round((ms$upper - ms$lower) / 2))
-      med_round <- as.integer(round(ms$med))
-      if (is.finite(pm) && pm > 0) return(sprintf("%d \u00B1 %d months", med_round, pm))
+      if (is.finite(pm) && pm > 0) {
+        return(sprintf("%d \u00B1 %d months", med_round, pm))
+      }
     }
-    sprintf("%d months", as.integer(round(ms$med)))
+    
+    sprintf("%d months", med_round)
   })
   
   output$survplot <- renderPlot({
     req(surv_obj())
     sf <- surv_obj()
     
-    df <- data.frame(time = sf$time, surv = sf$surv)
+    df_plot <- data.frame(
+      time = sf$time,
+      surv = sf$surv
+    )
+    
     if (!is.null(sf$lower) && !is.null(sf$upper)) {
-      df$lower <- sf$lower
-      df$upper <- sf$upper
+      df_plot$lower <- sf$lower
+      df_plot$upper <- sf$upper
     } else {
-      df$lower <- NA_real_
-      df$upper <- NA_real_
+      df_plot$lower <- NA_real_
+      df_plot$upper <- NA_real_
     }
     
-    df <- df[df$time <= 120, , drop = FALSE]
-    if (nrow(df) == 0) {
-      df <- data.frame(time = c(0, 60), surv = c(1, 1), lower = c(1, 1), upper = c(1, 1))
-    } else if (min(df$time) > 0) {
-      df <- rbind(data.frame(time = 0, surv = 1, lower = 1, upper = 1), df)
+    df_plot <- df_plot[df_plot$time <= 120, , drop = FALSE]
+    
+    if (nrow(df_plot) == 0) {
+      df_plot <- data.frame(
+        time = c(0, 120),
+        surv = c(1, 1),
+        lower = c(1, 1),
+        upper = c(1, 1)
+      )
+    } else if (min(df_plot$time) > 0) {
+      df_plot <- rbind(
+        data.frame(time = 0, surv = 1, lower = 1, upper = 1),
+        df_plot
+      )
     }
     
-    pts <- c(12, 36, 60, 120)
+    pts <- c(60, 120)
     s_main <- summary(sf, times = pts, extend = TRUE)
-    pts_df <- data.frame(time = s_main$time, surv = s_main$surv)
-    guide_df <- data.frame(time = c(12, 36, 60, 120))
     
-    ggplot(df, aes(x = time, y = surv)) +
+    pts_df <- data.frame(
+      time = s_main$time,
+      surv = s_main$surv
+    )
+    
+    guide_df <- data.frame(
+      time = c(60, 120)
+    )
+    
+    ggplot(df_plot, aes(x = time, y = surv)) +
       {
         if (isTRUE(input$show_ci)) {
-          geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#8fb3d9", alpha = 0.22)
+          geom_ribbon(
+            aes(ymin = lower, ymax = upper),
+            fill = "#8fb3d9",
+            alpha = 0.22
+          )
         }
       } +
       geom_vline(
@@ -620,7 +668,11 @@ server <- function(input, output, session) {
         linewidth = 0.55,
         color = "#cbd6e2"
       ) +
-      geom_step(color = "#1f6feb", linewidth = 1.5, direction = "hv") +
+      geom_step(
+        color = "#1f6feb",
+        linewidth = 1.5,
+        direction = "hv"
+      ) +
       geom_point(
         data = pts_df,
         aes(x = time, y = surv),
@@ -629,7 +681,7 @@ server <- function(input, output, session) {
         size = 3.2
       ) +
       scale_x_continuous(
-        limits = c(0, 120.8),
+        limits = c(0, 121),
         breaks = seq(0, 120, by = 12),
         expand = expansion(mult = c(0.01, 0.02))
       ) +
@@ -639,7 +691,10 @@ server <- function(input, output, session) {
         labels = function(x) sprintf("%.1f", x),
         expand = expansion(mult = c(0.01, 0.02))
       ) +
-      labs(x = "Months", y = "Overall survival") +
+      labs(
+        x = "Months",
+        y = "Overall survival"
+      ) +
       theme_minimal(base_size = 14) +
       theme(
         panel.grid.minor = element_blank(),
