@@ -1046,6 +1046,9 @@
     },
     "shiny/app.R": {
       "checksum": "7331dca5534f1b500c96c6e3487a1b07"
+    },
+    "R/_disable_autoload.R": {
+      "checksum": "f5d42a30efa43a89f44bdd79537a1db9"
     }
   },
   "users": null
