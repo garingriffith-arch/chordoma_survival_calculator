@@ -1,0 +1,34 @@
+# NCDB source and derivative data
+data/
+outputs/
+revision_2024_outputs/
+internal_do_not_share/
+*.rds
+*.RDS
+*.rda
+*.RData
+*.parquet
+*.feather
+*.fst
+*.qs
+*.csv.gz
+
+# R / RStudio
+.Rhistory
+.RDataTmp
+.Rproj.user/
+.Ruserdata
+*.Rproj
+renv/library/
+renv/staging/
+
+# Credentials and local configuration
+.Renviron
+.env
+.env.*
+*.log
+*.tmp
+
+# System
+.DS_Store
+Thumbs.db
