@@ -1,8 +1,10 @@
-# Deploying the investigational chordoma calculator
+# Investigational Shiny calculator: deployment
 
-Deploy from the **repository root**, where `app.R` and the `model/` directory are siblings. The root `app.R` loads the actual implementation in `shiny/app.R`. Do not deploy `shiny/` alone: the two model CSV files are required.
+The calculator loads the locked Cox equation from aggregate CSV files; it does **not** load NCDB participant records or fitted model RDS files. It is for research and demonstration pending independent external validation.
 
-## Files included in the deployment bundle
+## Required files
+
+Deploy from the repository root with this **minimal bundle**:
 
 ```text
 app.R
@@ -11,48 +13,38 @@ model/coefficients.csv
 model/reference_survival.csv
 ```
 
-No NCDB Participant User File, analytic cohort, fitted patient-level `.rds` object, bootstrap checkpoint, training script, manuscript, or `outputs/` directory is needed to run the calculator.
+`app.R` is the deployment entry point and sources the implementation in `shiny/app.R`. All four files must retain their relative paths.
 
-## Packages
-
-The app requires **shiny** and **bslib**. The deployment workstation needs **rsconnect** to publish to a Shiny hosting service supported by rsconnect. Package dependencies are installed on the server from the deployment bundle; do not upload a copy of a Windows R library.
-
-Install locally:
+## Run locally
 
 ```r
-install.packages(c("shiny", "bslib", "rsconnect"),
-                 repos = "https://cloud.r-project.org")
-```
-
-Check the equation without launching Shiny:
-
-```powershell
-& "C:\Program Files\R\R-4.6.0\bin\Rscript.exe" tests/test_equation.R
-```
-
-Launch locally from the repository root:
-
-```r
+install.packages(c("shiny", "bslib", "rsconnect"))
 shiny::runApp(".")
 ```
 
-Deploy from an R session in the repository root after configuring your Posit Connect or shinyapps.io account:
+Verify the frozen equation separately:
+
+```sh
+Rscript tests/test_equation.R
+```
+
+## Deploy
+
+After configuring an authorized shinyapps.io or Posit Connect account, from the repository root:
 
 ```r
 rsconnect::deployApp(
   appDir = getwd(),
   appPrimaryDoc = "app.R",
-  appFiles = c("app.R", "shiny/app.R",
-               "model/coefficients.csv", "model/reference_survival.csv")
+  appFiles = c(
+    "app.R", "shiny/app.R",
+    "model/coefficients.csv", "model/reference_survival.csv"
+  )
 )
 ```
 
-Check the returned bundle manifest before confirming deployment. If your hosting provider requires additional metadata, use the provider-specific deployment procedure.
+Do not deploy the full `R/` development pipeline, `outputs/`, private NCDB files, or a local R package library. The application needs only `shiny` and `bslib` at runtime.
 
-## Model and limitations
+## Use restrictions
 
-Only five locked Cox coefficients and reference survival at 60 and 120 months are loaded. The app does not retrain or refit and uses no NCDB participant-level records. Estimates are all-cause mortality for a registry-defined C41.0 cohort with recorded tumor size 1–100 mm. C41.0 does not confirm clival/intracranial anatomy, size may not be measured before treatment, and external validation remains unavailable. Use is investigational, not for clinical decisions.
-
-## Publication and repository hygiene
-
-This draft PR remains unmerged. Historical public commits of the older repository contain fitted model objects that may embed restricted NCDB data; see `HISTORY_REMEDIATION.md`. Resolve historical exposure and small-cell disclosure before citing the default branch as a fully clean published release. Changing the working tree does not clear repository history.
+Inputs must be supplied explicitly; missing values are not imputed. Recorded tumor diameter must be between 1 and 100 mm. Estimates represent **all-cause mortality** at 60 and 120 months in an internally validated, registry-defined cohort with site C41.0. The app does not establish chordoma-specific mortality risk, clinical utility, treatment benefit, or performance in a new hospital or patient population.
