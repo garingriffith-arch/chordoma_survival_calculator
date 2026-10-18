@@ -18,5 +18,6 @@ jobs:
             any::bslib
       - name: Test locked equation
         run: Rscript tests/test_equation.R
-      - name: Load calculator
-        run: Rscript -e 'x <- source("app.R", local=TRUE)$value; stopifnot(inherits(x, "shiny.appobj"))'
+      - name: Verify startup requires no NCDB PUF
+        run: |
+          Rscript -e 'Sys.unsetenv("NCDB_BONE_PUF"); shiny::loadSupport(appDir="."); x <- source("app.R", local=TRUE)$value; stopifnot(inherits(x, "shiny.appobj")); cat("Shiny startup has no NCDB dependency\n")'
